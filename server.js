@@ -4,12 +4,7 @@ const cors = require('cors');
 
 const app = express();
 app.use(express.json());
-
-const corsOptions = {
-  origin: 'http://localhost:3000', // Update this to match the origin you want to allow
-  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
-};
-app.use(cors(corsOptions));
+app.use(cors());
 
 const { upload, gfs } = require('./upload');
 
@@ -38,6 +33,18 @@ const athleteSchema = new mongoose.Schema({
   ableToBalance: String,
   coachingAspect: String,
   profileImage: { type: mongoose.Schema.Types.ObjectId, ref: 'fs.files' },
+  bookings: [
+    {
+      coachId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coach', required: true },
+      coachName: { type: String, required: true },
+      coachEmail: { type: String, required: true },
+      googleMeetLink: { type: String, required: true },
+      bookingTimestamp: { type: Date, required: true },
+      bookingDate: { type: String, required: true },
+      startTime: { type: String, required: true },
+      endTime: { type: String, required: true },
+    },
+  ],
 });
 
 // Create a model based on the schema
@@ -109,6 +116,16 @@ const coachSchema = new mongoose.Schema({
   ageGroup: String,
   certifications: String,
   goodDealing: String,
+  bookings: [
+    {
+      athleteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Athlete', required: true },
+      googleMeetLink: { type: String, required: true },
+      bookingTimestamp: { type: Date, required: true },
+      bookingDate: { type: String, required: true },
+      startTime: { type: String, required: true },
+      endTime: { type: String, required: true },
+    },
+  ],
 });
 
 // Create a model based on the schema
@@ -160,6 +177,110 @@ app.get('/api/coaches/:id/image', async (req, res) => {
     readStream.pipe(res);
   } catch (error) {
     console.error('Error retrieving image:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+// Update athlete data
+app.put('/api/athletes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedData = req.body;
+    const athlete = await Athlete.findByIdAndUpdate(
+      id,
+      { $set: updatedData },
+      { new: true }
+    );
+    if (!athlete) {
+      return res.status(404).json({ error: 'Athlete not found' });
+    }
+    res.json(athlete);
+  } catch (error) {
+    console.error('Error updating athlete data:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+// Update coach data
+app.put('/api/coaches/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedData = req.body;
+    const coach = await Coach.findByIdAndUpdate(
+      id,
+      { $set: updatedData },
+      { new: true }
+    );
+    if (!coach) {
+      return res.status(404).json({ error: 'Coach not found' });
+    }
+    res.json(coach);
+  } catch (error) {
+    console.error('Error updating coach data:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+app.get('/api/coaches', async (req, res) => {
+  try {
+    const coaches = await Coach.find();
+    res.json(coaches);
+  } catch (error) {
+    console.error('Error fetching coaches:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+app.get('/api/athletes/:id/bookings', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const athlete = await Athlete.findById(id).populate('bookings.coachId');
+    if (!athlete) {
+      return res.status(404).json({ error: 'Athlete not found' });
+    }
+    res.json(athlete.bookings);
+  } catch (error) {
+    console.error('Error fetching athlete bookings:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+app.get('/api/coaches/:id/sessions', async (req, res) => {
+  try {
+    const coachId = req.params.id;
+    const coach = await Coach.findById(coachId).populate('bookings.athleteId');
+    if (!coach) {
+      return res.status(404).json({ error: 'Coach not found' });
+    }
+    const upcomingSessions = coach.bookings.map((booking) => ({
+      _id: booking._id,
+      athleteName: booking.athleteId.fullName,
+      bookingDate: booking.bookingDate,
+      startTime: booking.startTime,
+      googleMeetLink: booking.googleMeetLink,
+    }));
+    res.json(upcomingSessions);
+  } catch (error) {
+    console.error('Error fetching coach sessions:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+app.put('/api/coaches/:id/availability', async (req, res) => {
+  try {
+    const coachId = req.params.id;
+    const { availableTimings } = req.body;
+    const coach = await Coach.findByIdAndUpdate(
+      coachId,
+      { availableTimings },
+      { new: true }
+    );
+    if (!coach) {
+      return res.status(404).json({ error: 'Coach not found' });
+    }
+    res.json(coach);
+  } catch (error) {
+    console.error('Error saving coach availability:', error);
     res.status(500).json({ error: 'An error occurred' });
   }
 });
