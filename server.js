@@ -1,12 +1,24 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const admin = require('firebase-admin');
+const serviceAccount = require('./firebase-admin-json.json');
+const multer = require('multer');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-const { upload, gfs } = require('./upload');
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  storageBucket: 'mp-connect-images.appspot.com'
+});
+
+const bucket = admin.storage().bucket();
 
 // MongoDB connection string
 const MONGODB_URI = 'mongodb+srv://ganateja:qwerty12345@mpcluster.q2u7p6t.mongodb.net/athlete_data?retryWrites=true&w=majority&appName=MPCluster';
@@ -18,6 +30,12 @@ mongoose.connect(MONGODB_URI, {
 })
   .then(() => console.log('Connected to MongoDB Atlas'))
   .catch((error) => console.error('Error connecting to MongoDB Atlas:', error));
+
+  // Connect to MongoDB Atlas
+const conn = mongoose.createConnection(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+});
 
 // Create a schema for athlete data
 const athleteSchema = new mongoose.Schema({
@@ -32,7 +50,7 @@ const athleteSchema = new mongoose.Schema({
   injuries: String,
   ableToBalance: String,
   coachingAspect: String,
-  profileImage: { type: mongoose.Schema.Types.ObjectId, ref: 'fs.files' },
+  profileImage: String,
   bookings: [
     {
       coachId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coach', required: true },
@@ -51,17 +69,30 @@ const athleteSchema = new mongoose.Schema({
 const Athlete = mongoose.model('Athlete', athleteSchema);
 
 // API endpoint to save athlete data
-app.post('/api/athletes', upload.single('profileImage'), async (req, res) => {
+app.post('/api/athletes', async (req, res) => {
   try {
     const athleteData = req.body;
     if (req.file) {
-      athleteData.profileImage = req.file.id;
+      const blob = bucket.file(req.file.originalname);
+      const blobWriter = blob.createWriteStream();
+      blobWriter.on('error', (err) => {
+        console.error('Error uploading image:', err);
+        res.status(500).json({ error: 'An error occurred' });
+      });
+      blobWriter.on('finish', async () => {
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
+        athleteData.profileImage = publicUrl;
+        const athlete = new Athlete(athleteData);
+        await athlete.save();
+        res.status(201).json(athlete);
+      });
+      blobWriter.end(req.file.buffer);
     } else {
       athleteData.profileImage = null;
+      const athlete = new Athlete(athleteData);
+      await athlete.save();
+      res.status(201).json(athlete);
     }
-    const athlete = new Athlete(athleteData);
-    await athlete.save();
-    res.status(201).json(athlete);
   } catch (error) {
     console.error('Error saving athlete data:', error);
     if (error.code === 11000) {
@@ -71,6 +102,8 @@ app.post('/api/athletes', upload.single('profileImage'), async (req, res) => {
     }
   }
 });
+
+app.use('/uploads', express.static('uploads'));
 
 app.post('/api/athletes/login', async (req, res) => {
   try {
@@ -86,31 +119,11 @@ app.post('/api/athletes/login', async (req, res) => {
   }
 });
 
-// Start the server
-const port = process.env.PORT || 5001;
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
-
-app.get('/api/athletes/:id/image', async (req, res) => {
-  try {
-    const file = await gfs.files.findOne({ _id: mongoose.Types.ObjectId(req.params.id) });
-    if (!file) {
-      return res.status(404).json({ error: 'Image not found' });
-    }
-    const readStream = gfs.createReadStream(file.filename);
-    readStream.pipe(res);
-  } catch (error) {
-    console.error('Error retrieving image:', error);
-    res.status(500).json({ error: 'An error occurred' });
-  }
-});
-
 const coachSchema = new mongoose.Schema({
   fullName: String,
   email: { type: String, unique: true },
   password: String,
-  profileImage: { type: mongoose.Schema.Types.ObjectId, ref: 'fs.files' },
+  profileImage: String,
   coaching: String,
   expertise: String,
   ageGroup: String,
@@ -132,17 +145,30 @@ const coachSchema = new mongoose.Schema({
 const Coach = mongoose.model('Coach', coachSchema);
 
 // API endpoint to save coach data
-app.post('/api/coaches', upload.single('profileImage'), async (req, res) => {
+app.post('/api/coaches', async (req, res) => {
   try {
     const coachData = req.body;
     if (req.file) {
-      coachData.profileImage = req.file.id;
+      const blob = bucket.file(req.file.originalname);
+      const blobWriter = blob.createWriteStream();
+      blobWriter.on('error', (err) => {
+        console.error('Error uploading image:', err);
+        res.status(500).json({ error: 'An error occurred' });
+      });
+      blobWriter.on('finish', async () => {
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
+        coachData.profileImage = publicUrl;
+        const coach = new Coach(coachData);
+        await coach.save();
+        res.status(201).json(coach);
+      });
+      blobWriter.end(req.file.buffer);
     } else {
       coachData.profileImage = null;
+      const coach = new Coach(coachData);
+      await coach.save();
+      res.status(201).json(coach);
     }
-    const coach = new Coach(coachData);
-    await coach.save();
-    res.status(201).json(coach);
   } catch (error) {
     console.error('Error saving coach data:', error);
     if (error.code === 11000) {
@@ -152,6 +178,7 @@ app.post('/api/coaches', upload.single('profileImage'), async (req, res) => {
     }
   }
 });
+
 
 app.post('/api/coaches/login', async (req, res) => {
   try {
@@ -167,34 +194,44 @@ app.post('/api/coaches/login', async (req, res) => {
   }
 });
 
-app.get('/api/coaches/:id/image', async (req, res) => {
-  try {
-    const file = await gfs.files.findOne({ _id: mongoose.Types.ObjectId(req.params.id) });
-    if (!file) {
-      return res.status(404).json({ error: 'Image not found' });
-    }
-    const readStream = gfs.createReadStream(file.filename);
-    readStream.pipe(res);
-  } catch (error) {
-    console.error('Error retrieving image:', error);
-    res.status(500).json({ error: 'An error occurred' });
-  }
-});
-
 // Update athlete data
-app.put('/api/athletes/:id', async (req, res) => {
+app.put('/api/athletes/:id', upload.single('profileImage'), async (req, res) => {
   try {
     const { id } = req.params;
-    const updatedData = req.body;
-    const athlete = await Athlete.findByIdAndUpdate(
-      id,
-      { $set: updatedData },
-      { new: true }
-    );
-    if (!athlete) {
-      return res.status(404).json({ error: 'Athlete not found' });
+    const updatedData = {};
+
+    if (req.file) {
+      const blob = bucket.file(req.file.originalname);
+      const blobWriter = blob.createWriteStream();
+      blobWriter.on('error', (err) => {
+        console.error('Error uploading image:', err);
+        res.status(500).json({ error: 'An error occurred' });
+      });
+      blobWriter.on('finish', async () => {
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
+        updatedData.profileImage = publicUrl;
+        const athlete = await Athlete.findByIdAndUpdate(
+          id,
+          { $set: updatedData },
+          { new: true }
+        );
+        if (!athlete) {
+          return res.status(404).json({ error: 'Athlete not found' });
+        }
+        res.json(athlete);
+      });
+      blobWriter.end(req.file.buffer);
+    } else {
+      const athlete = await Athlete.findByIdAndUpdate(
+        id,
+        { $set: updatedData },
+        { new: true }
+      );
+      if (!athlete) {
+        return res.status(404).json({ error: 'Athlete not found' });
+      }
+      res.json(athlete);
     }
-    res.json(athlete);
   } catch (error) {
     console.error('Error updating athlete data:', error);
     res.status(500).json({ error: 'An error occurred' });
@@ -202,19 +239,43 @@ app.put('/api/athletes/:id', async (req, res) => {
 });
 
 // Update coach data
-app.put('/api/coaches/:id', async (req, res) => {
+app.put('/api/coaches/:id', upload.single('profileImage'), async (req, res) => {
   try {
     const { id } = req.params;
-    const updatedData = req.body;
-    const coach = await Coach.findByIdAndUpdate(
-      id,
-      { $set: updatedData },
-      { new: true }
-    );
-    if (!coach) {
-      return res.status(404).json({ error: 'Coach not found' });
+    const updatedData = {};
+
+    if (req.file) {
+      const blob = bucket.file(req.file.originalname);
+      const blobWriter = blob.createWriteStream();
+      blobWriter.on('error', (err) => {
+        console.error('Error uploading image:', err);
+        res.status(500).json({ error: 'An error occurred' });
+      });
+      blobWriter.on('finish', async () => {
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
+        updatedData.profileImage = publicUrl;
+        const coach = await Coach.findByIdAndUpdate(
+          id,
+          { $set: updatedData },
+          { new: true }
+        );
+        if (!coach) {
+          return res.status(404).json({ error: 'Coach not found' });
+        }
+        res.json(coach);
+      });
+      blobWriter.end(req.file.buffer);
+    } else {
+      const coach = await Coach.findByIdAndUpdate(
+        id,
+        { $set: updatedData },
+        { new: true }
+      );
+      if (!coach) {
+        return res.status(404).json({ error: 'Coach not found' });
+      }
+      res.json(coach);
     }
-    res.json(coach);
   } catch (error) {
     console.error('Error updating coach data:', error);
     res.status(500).json({ error: 'An error occurred' });
@@ -283,4 +344,10 @@ app.put('/api/coaches/:id/availability', async (req, res) => {
     console.error('Error saving coach availability:', error);
     res.status(500).json({ error: 'An error occurred' });
   }
+});
+
+// Start the server
+const port = process.env.PORT || 5001;
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
