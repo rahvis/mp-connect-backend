@@ -4,10 +4,20 @@ const cors = require('cors');
 const admin = require('firebase-admin');
 const serviceAccount = require('./firebase-admin-json.json');
 const multer = require('multer');
+const http = require('http');
+const socketIo = require('socket.io');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"]
+  }
+});
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -342,6 +352,54 @@ app.put('/api/coaches/:id/availability', async (req, res) => {
     res.json(coach);
   } catch (error) {
     console.error('Error saving coach availability:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log('New client connected');
+
+  socket.on('callStarted', (data) => {
+    console.log('Call started:', data);
+    io.emit('callStarted', data);
+  });
+
+  socket.on('callEnded', (data) => {
+    console.log('Call ended:', data);
+    io.emit('callEnded', data);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Client disconnected');
+  });
+});
+
+// Update the session status when a call starts
+app.put('/api/sessions/:id/start-call', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const session = await Session.findByIdAndUpdate(id, { callStarted: true }, { new: true });
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    res.json({ success: true, session });
+  } catch (error) {
+    console.error('Error updating session status:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+// Update the session status when a call ends
+app.put('/api/sessions/:id/end-call', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const session = await Session.findByIdAndUpdate(id, { callStarted: false }, { new: true });
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    res.json({ success: true, session });
+  } catch (error) {
+    console.error('Error updating session status:', error);
     res.status(500).json({ error: 'An error occurred' });
   }
 });
