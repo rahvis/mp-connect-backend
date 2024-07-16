@@ -56,7 +56,7 @@ const athleteSchema = new mongoose.Schema({
       coachId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coach', required: true },
       coachName: { type: String, required: true },
       coachEmail: { type: String, required: true },
-      googleMeetLink: { type: String, required: true },
+      channelId: { type: String, required: true },
       bookingTimestamp: { type: Date, required: true },
       bookingDate: { type: String, required: true },
       startTime: { type: String, required: true },
@@ -129,10 +129,12 @@ const coachSchema = new mongoose.Schema({
   ageGroup: String,
   certifications: String,
   goodDealing: String,
+  personalBio: String,
+  previousCoaching: String,
   bookings: [
     {
       athleteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Athlete', required: true },
-      googleMeetLink: { type: String, required: true },
+      channelId: { type: String, required: true },
       bookingTimestamp: { type: Date, required: true },
       bookingDate: { type: String, required: true },
       startTime: { type: String, required: true },
@@ -198,7 +200,7 @@ app.post('/api/coaches/login', async (req, res) => {
 app.put('/api/athletes/:id', upload.single('profileImage'), async (req, res) => {
   try {
     const { id } = req.params;
-    const updatedData = {};
+    const updatedData = req.body;
 
     if (req.file) {
       const blob = bucket.file(req.file.originalname);
@@ -210,6 +212,7 @@ app.put('/api/athletes/:id', upload.single('profileImage'), async (req, res) => 
       blobWriter.on('finish', async () => {
         const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
         updatedData.profileImage = publicUrl;
+        
         const athlete = await Athlete.findByIdAndUpdate(
           id,
           { $set: updatedData },
@@ -242,7 +245,7 @@ app.put('/api/athletes/:id', upload.single('profileImage'), async (req, res) => 
 app.put('/api/coaches/:id', upload.single('profileImage'), async (req, res) => {
   try {
     const { id } = req.params;
-    const updatedData = {};
+    const updatedData = req.body;
 
     if (req.file) {
       const blob = bucket.file(req.file.originalname);
@@ -254,6 +257,7 @@ app.put('/api/coaches/:id', upload.single('profileImage'), async (req, res) => {
       blobWriter.on('finish', async () => {
         const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
         updatedData.profileImage = publicUrl;
+        
         const coach = await Coach.findByIdAndUpdate(
           id,
           { $set: updatedData },
@@ -318,7 +322,7 @@ app.get('/api/coaches/:id/sessions', async (req, res) => {
       athleteName: booking.athleteId.fullName,
       bookingDate: booking.bookingDate,
       startTime: booking.startTime,
-      googleMeetLink: booking.googleMeetLink,
+      channelId: booking.channelId,
     }));
     res.json(upcomingSessions);
   } catch (error) {
@@ -345,6 +349,50 @@ app.put('/api/coaches/:id/availability', async (req, res) => {
     res.status(500).json({ error: 'An error occurred' });
   }
 });
+
+// Fetch coach availability
+app.get('/api/coaches/:id/availability', async (req, res) => {
+  try {
+    const coachId = req.params.id;
+    const coach = await Coach.findById(coachId);
+    if (!coach) {
+      return res.status(404).json({ error: 'Coach not found' });
+    }
+    res.json({ availableTimings: coach.availableTimings || [] });
+  } catch (error) {
+    console.error('Error fetching coach availability:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+// Update coach availability
+app.put('/api/coaches/:id/availability', async (req, res) => {
+  try {
+    const coachId = req.params.id;
+    const { availableTimings } = req.body;
+    const coach = await Coach.findByIdAndUpdate(
+      coachId,
+      { availableTimings },
+      { new: true }
+    );
+    if (!coach) {
+      return res.status(404).json({ error: 'Coach not found' });
+    }
+    res.json(coach);
+  } catch (error) {
+    console.error('Error updating coach availability:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+function generateChannelId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < 10; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
 
 // Start the server
 const port = process.env.PORT || 5001;
