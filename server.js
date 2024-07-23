@@ -131,6 +131,10 @@ const coachSchema = new mongoose.Schema({
   goodDealing: String,
   personalBio: String,
   previousCoaching: String,
+  availableTimings: [{
+    date: String,
+    times: [String]
+  }],
   bookings: [
     {
       athleteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Athlete', required: true },
@@ -331,26 +335,27 @@ app.get('/api/coaches/:id/sessions', async (req, res) => {
   }
 });
 
-app.put('/api/coaches/:id/availability', async (req, res) => {
-  try {
-    const coachId = req.params.id;
-    const { availableTimings } = req.body;
-    const coach = await Coach.findByIdAndUpdate(
-      coachId,
-      { availableTimings },
-      { new: true }
-    );
-    if (!coach) {
-      return res.status(404).json({ error: 'Coach not found' });
-    }
-    res.json(coach);
-  } catch (error) {
-    console.error('Error saving coach availability:', error);
-    res.status(500).json({ error: 'An error occurred' });
-  }
-});
+// app.put('/api/coaches/:id/availability', async (req, res) => {
+//   try {
+//     const coachId = req.params.id;
+//     const { availableTimings } = req.body;
+//     const coach = await Coach.findByIdAndUpdate(
+//       coachId,
+//       { availableTimings },
+//       { new: true }
+//     );
+//     if (!coach) {
+//       return res.status(404).json({ error: 'Coach not found' });
+//     }
+//     res.json(coach);
+//   } catch (error) {
+//     console.error('Error saving coach availability:', error);
+//     res.status(500).json({ error: 'An error occurred' });
+//   }
+// });
 
 // Fetch coach availability
+// Get coach availability
 app.get('/api/coaches/:id/availability', async (req, res) => {
   try {
     const coachId = req.params.id;
@@ -372,13 +377,13 @@ app.put('/api/coaches/:id/availability', async (req, res) => {
     const { availableTimings } = req.body;
     const coach = await Coach.findByIdAndUpdate(
       coachId,
-      { availableTimings },
+      { $set: { availableTimings } },
       { new: true }
     );
     if (!coach) {
       return res.status(404).json({ error: 'Coach not found' });
     }
-    res.json(coach);
+    res.json({ availableTimings: coach.availableTimings });
   } catch (error) {
     console.error('Error updating coach availability:', error);
     res.status(500).json({ error: 'An error occurred' });
