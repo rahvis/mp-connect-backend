@@ -335,57 +335,44 @@ app.get('/api/coaches/:id/sessions', async (req, res) => {
   }
 });
 
-// app.put('/api/coaches/:id/availability', async (req, res) => {
-//   try {
-//     const coachId = req.params.id;
-//     const { availableTimings } = req.body;
-//     const coach = await Coach.findByIdAndUpdate(
-//       coachId,
-//       { availableTimings },
-//       { new: true }
-//     );
-//     if (!coach) {
-//       return res.status(404).json({ error: 'Coach not found' });
-//     }
-//     res.json(coach);
-//   } catch (error) {
-//     console.error('Error saving coach availability:', error);
-//     res.status(500).json({ error: 'An error occurred' });
-//   }
-// });
-
-// Fetch coach availability
-// Get coach availability
-app.get('/api/coaches/:id/availability', async (req, res) => {
-  try {
-    const coachId = req.params.id;
-    const coach = await Coach.findById(coachId);
-    if (!coach) {
-      return res.status(404).json({ error: 'Coach not found' });
-    }
-    res.json({ availableTimings: coach.availableTimings || [] });
-  } catch (error) {
-    console.error('Error fetching coach availability:', error);
-    res.status(500).json({ error: 'An error occurred' });
-  }
-});
-
 // Update coach availability
 app.put('/api/coaches/:id/availability', async (req, res) => {
   try {
     const coachId = req.params.id;
     const { availableTimings } = req.body;
+    
+    console.log('Updating availability for coach:', coachId);
+    console.log('Received availableTimings:', availableTimings);
+
     const coach = await Coach.findByIdAndUpdate(
       coachId,
-      { $set: { availableTimings } },
+      { $set: { availableTimings: availableTimings } },
       { new: true }
     );
+
     if (!coach) {
+      console.log('Coach not found:', coachId);
       return res.status(404).json({ error: 'Coach not found' });
     }
     res.json({ availableTimings: coach.availableTimings });
   } catch (error) {
     console.error('Error updating coach availability:', error);
+    res.status(500).json({ error: 'An error occurred', details: error.message });
+  }
+});
+
+// Fetch coach availability
+app.get('/api/coaches/:id/availability', async (req, res) => {
+  try {
+    const coachId = req.params.id;
+    const coach = await Coach.findById(coachId);
+    if (!coach) {
+      console.log('Coach not found:', coachId);
+      return res.status(404).json({ error: 'Coach not found' });
+    }
+    res.json({ availableTimings: coach.availableTimings || [] });
+  } catch (error) {
+    console.error('Error fetching coach availability:', error);
     res.status(500).json({ error: 'An error occurred' });
   }
 });
