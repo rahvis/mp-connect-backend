@@ -20,7 +20,7 @@ admin.initializeApp({
 
 const bucket = admin.storage().bucket();
 
-// MongoDB connection string
+// MongoDB connection string - hardcoded
 const MONGODB_URI = 'mongodb+srv://ganateja:qwerty12345@mpcluster.q2u7p6t.mongodb.net/athlete_data?retryWrites=true&w=majority&appName=MPCluster';
 
 // Connect to MongoDB Atlas
